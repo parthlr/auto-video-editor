@@ -19,6 +19,7 @@ int main(int argc, char* argv[]) {
 		printf("[ERROR] Failed to read and write new video\n");
 		return -1;
 	}
+	av_write_trailer(video->outputContext);
 	freeVideo(video); // Frees all codecs and contexts
 	return 0;
 }

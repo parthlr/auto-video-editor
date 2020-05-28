@@ -1,9 +1,11 @@
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
-#include<libswresample/swresample.h>
+#include <libswresample/swresample.h>
+#include <string.h>
 
 typedef struct Video {
+	char* filename;
 	AVFormatContext* inputContext;
 	AVFormatContext* outputContext;
 	AVCodec* videoCodec;
@@ -23,11 +25,11 @@ AVStream* getVideoStream(Video* video);
 
 AVStream* getAudioStream(Video* video);
 
-void initVideo(Video* video);
+void initVideo(Video* video, char* filename);
 
 int initResampler(AVCodecContext* inputContext, AVCodecContext* outputContext, SwrContext** resampleContext);
 
-int openVideo(Video* video, char* filename, char* outputFile);
+int openVideo(Video* video, char* outputFile);
 
 int prepareStreamInfo(AVCodecContext** codecContext, AVCodec** codec, AVStream* stream);
 
@@ -35,7 +37,7 @@ int prepareVideoOutStream(Video* video);
 
 int prepareAudioOutStream(Video* video);
 
-int findStreams(Video* video, char* filename, char* outputFile);
+int findStreams(Video* video, char* outputFile);
 
 int decodeVideo(Video* video, AVPacket* packet, AVFrame* frame);
 

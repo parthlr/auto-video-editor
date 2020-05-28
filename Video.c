@@ -1,6 +1,6 @@
 #include "Video.h"
 
-void initVideo(Video* video) {
+void initVideo(Video* video, char* filename) {
 	video->inputContext = NULL;
 	video->outputContext = NULL;
 	video->videoCodec = NULL;
@@ -11,6 +11,8 @@ void initVideo(Video* video) {
 	video->audioCodecContext_I = NULL;
 	video->videoStream = -1;
 	video->audioStream = -1;
+	video->filename = (char*)malloc(strlen(filename) + 1);
+	strcpy(video->filename, filename);
 }
 
 int initResampler(AVCodecContext* inputContext, AVCodecContext* outputContext, SwrContext** resampleContext) {
@@ -45,9 +47,9 @@ AVStream* getAudioStream(Video* video) {
 	return video->inputContext->streams[audioStream];
 }
 
-int findStreams(Video* video, char* filename, char* outputFile) {
-	if (openVideo(video, filename, outputFile) < 0) {
-		printf("[ERROR] Video %s failed to open\n", filename);
+int findStreams(Video* video, char* outputFile) {
+	if (openVideo(video, outputFile) < 0) {
+		printf("[ERROR] Video %s failed to open\n", video->filename);
 		return -1;
 	}
 	for (int i = 0; i < video->inputContext->nb_streams; i++) {
@@ -76,11 +78,11 @@ int findStreams(Video* video, char* filename, char* outputFile) {
 		}
 	}
 	if (video->videoStream == -1) {
-		printf("[ERROR] Video stream for %s not found\n", filename);
+		printf("[ERROR] Video stream for %s not found\n", video->filename);
 		return -1;
 	}
 	if (video->audioStream == -1) {
-		printf("[ERROR] Audio stream for %s not found\n", filename);
+		printf("[ERROR] Audio stream for %s not found\n", video->filename);
 		return -1;
 	}
 	if (!(video->outputContext->oformat->flags & AVFMT_NOFILE)) {
@@ -92,13 +94,13 @@ int findStreams(Video* video, char* filename, char* outputFile) {
 	return 0;
 }
 
-int openVideo(Video* video, char* filename, char* outputFile) {
+int openVideo(Video* video, char* outputFile) {
 	video->inputContext = avformat_alloc_context();
 	if (!video->inputContext) {
 		printf("[ERROR] Failed to allocate input format context\n");
 		return -1;
 	}
-	if (avformat_open_input(&(video->inputContext), filename, NULL, NULL) < 0) {
+	if (avformat_open_input(&(video->inputContext), video->filename, NULL, NULL) < 0) {
 		printf("[ERROR] Could not open the input file\n");
 		return -1;
 	}
@@ -112,7 +114,7 @@ int openVideo(Video* video, char* filename, char* outputFile) {
 		printf("[ERROR] Failed to create output context\n");
 		return -1;
 	}
-	printf("[OPEN] Video %s opened\n", filename);
+	printf("[OPEN] Video %s opened\n", video->filename);
 	return 0;
 }
 
@@ -155,6 +157,8 @@ int prepareVideoOutStream(Video* video) {
 	video->videoCodecContext_O->time_base = (AVRational){1, 60};
 	video->videoCodecContext_O->framerate = (AVRational){60, 1};
 	video->videoCodecContext_O->pix_fmt = video->videoCodecContext_I->pix_fmt;
+	video->videoCodecContext_O->extradata = video->videoCodecContext_I->extradata;
+	video->videoCodecContext_O->extradata_size = video->videoCodecContext_I->extradata_size;
 	if (avcodec_open2(video->videoCodecContext_O, video->videoCodec, NULL) < 0) {
 		printf("[ERROR] Failed to open video output codec\n");
 		return -1;
@@ -181,7 +185,7 @@ int prepareAudioOutStream(Video* video) {
 	video->audioCodecContext_O->channel_layout = av_get_default_channel_layout(video->audioCodecContext_O->channels);
 	video->audioCodecContext_O->sample_rate = video->audioCodecContext_I->sample_rate;
 	video->audioCodecContext_O->sample_fmt = video->audioCodec->sample_fmts[0];
-	video->audioCodecContext_O->bit_rate = video->audioCodecContext_I->bit_rate;
+	video->audioCodecContext_O->bit_rate = 384000;//video->audioCodecContext_I->bit_rate;
 	video->audioCodecContext_O->time_base = video->audioCodecContext_I->time_base;
 	video->audioCodecContext_O->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
 	if (avcodec_open2(video->audioCodecContext_O, video->audioCodec, NULL) < 0) {
@@ -236,7 +240,6 @@ int readFrames(Video* video, AVPacket* packet, AVFrame* frame) {
 	// Flush encoder
 	encodeVideo(video, NULL);
 	encodeAudio(video, NULL);
-	av_write_trailer(video->outputContext);
 	return 0;
 }
 
