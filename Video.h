@@ -31,6 +31,8 @@ int initResampler(AVCodecContext* inputContext, AVCodecContext* outputContext, S
 
 int openVideo(Video* video, char* outputFile);
 
+int writeHeader(AVFormatContext* outputFormatContext);
+
 int prepareStreamInfo(AVCodecContext** codecContext, AVCodec** codec, AVStream* stream);
 
 int prepareVideoOutStream(Video* video);

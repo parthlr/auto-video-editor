@@ -16,11 +16,11 @@ void initSequence(ClipSequence** sequence);
 
 int addVideo(ClipSequence* sequence, Video* video);
 
-int openCurrentVideo(ClipSequence* sequence, Video* video/*, char* outputFile*/);
+int openCurrentVideo(ClipSequence* sequence, Video* video);
 
 int allocateSequenceOutput(ClipSequence* sequence, char* outputFile);
 
-int findVideoStreams(ClipSequence* sequence, Video* video/*, char* outputFile*/);
+int findVideoStreams(ClipSequence* sequence, Video* video);
 
 int decodeVideoSequence(ClipSequence* sequence, Video* video, AVPacket* packet, AVFrame* frame);
 
@@ -31,3 +31,5 @@ int decodeAudioSequence(ClipSequence* sequence, Video* video, AVPacket* packet, 
 int encodeAudioSequence(ClipSequence* sequence, Video* video, AVFrame* frame);
 
 int readSequenceFrames(ClipSequence* sequence, Video* video, AVPacket* packet, AVFrame* frame);
+
+void freeSequence(ClipSequence* sequence);

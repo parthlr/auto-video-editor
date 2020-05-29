@@ -118,6 +118,15 @@ int openVideo(Video* video, char* outputFile) {
 	return 0;
 }
 
+int writeHeader(AVFormatContext* outputFormatContext) {
+	AVDictionary* dic = NULL;
+	if (avformat_write_header(outputFormatContext, &dic) < 0) {
+		printf("[ERROR] Error while writing header to output file\n");
+		return -1;
+	}
+	return 0;
+}
+
 int prepareStreamInfo(AVCodecContext** codecContext, AVCodec** codec, AVStream* stream) {
 	*codec = avcodec_find_decoder(stream->codecpar->codec_id);
 	if (!*codec) {

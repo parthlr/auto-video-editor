@@ -8,11 +8,8 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
-	AVDictionary* dic = NULL;
-	if (avformat_write_header(video->outputContext, &dic) < 0) {
-		printf("[ERROR] Error while writing header to output file\n");
-		return -1;
-	}
+	writeHeader(video->outputContext);
+
 	AVFrame* frame = av_frame_alloc();
 	AVPacket* packet = av_packet_alloc();
 	if (readFrames(video, packet, frame) < 0) {
