@@ -16,10 +16,7 @@ void initVideo(Video* video, char* filename) {
 }
 
 int initResampler(AVCodecContext* inputContext, AVCodecContext* outputContext, SwrContext** resampleContext) {
-	*resampleContext = swr_alloc_set_opts(NULL, av_get_default_channel_layout(outputContext->channels),
-																				outputContext->sample_fmt, outputContext->sample_rate,
-																				av_get_default_channel_layout(inputContext->channels),
-																				inputContext->sample_fmt, inputContext->sample_rate, 0, NULL);
+	*resampleContext = swr_alloc_set_opts(NULL, av_get_default_channel_layout(outputContext->channels), outputContext->sample_fmt, outputContext->sample_rate, av_get_default_channel_layout(inputContext->channels), inputContext->sample_fmt, inputContext->sample_rate, 0, NULL);
 	if (!*resampleContext) {
 		printf("[ERROR] Failed to allocate resample context\n");
 		return -1;

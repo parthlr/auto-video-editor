@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
 			return -1;
 		}
 		if (index == 0) {
-			writeHeader(video->outputContext);
+			writeHeader(sequence->outputContext);
 		}
 		AVFrame* frame = av_frame_alloc();
 		AVPacket* packet = av_packet_alloc();

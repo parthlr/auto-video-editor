@@ -2,8 +2,8 @@
 
 int main(int argc, char* argv[]) {
 	Video* video = (Video*)malloc(sizeof(Video));
-	initVideo(video);
-	if (findStreams(video, argv[1], argv[2]) < 0) {
+	initVideo(video, argv[1]);
+	if (findStreams(video, argv[2]) < 0) {
 		printf("[ERROR] Could not find streams\n");
 		return -1;
 	}
