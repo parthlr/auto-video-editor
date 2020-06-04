@@ -37,9 +37,13 @@ int main(int argc, char* argv[]) {
 		if (index == 0) {
 			writeHeader(sequence->outputContext);
 		}
+		if (prepareVideoOutput(video) < 0) {
+			printf("[ERROR] Failed to prepare video output\n");
+			return -1;
+		}
 		AVFrame* frame = av_frame_alloc();
 		AVPacket* packet = av_packet_alloc();
-		if (readSequenceFrames(sequence, currentNode->video, packet, frame) < 0) {
+		if (copySequenceFrames(sequence, currentNode->video, packet, frame) < 0) {
 			printf("[ERROR] Failed to read and write new video\n");
 			return -1;
 		}

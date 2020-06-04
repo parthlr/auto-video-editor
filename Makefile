@@ -11,6 +11,10 @@ LDLIBS := $(shell pkg-config --libs $(FFMPEG_LIBS))
 SRC_FILES := $(wildcard $(SRC_DIR)/*.c)
 EXAMPLES_FILES := $(wildcard $(EXAMPLES_DIR)/*.c)
 BIN_FILES := $(SRC_FILES:$(SRC_DIR)/%.c=$(BIN_DIR)/%.o)
+
+test-cut: $(BIN_FILES) $(BIN_DIR)/test-cut.o
+		$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
+
 test-video: $(BIN_FILES) $(BIN_DIR)/test-video.o
 		$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 

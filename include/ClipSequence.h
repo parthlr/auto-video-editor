@@ -1,11 +1,13 @@
 #include <dirent.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include "VideoList.h"
 
 typedef struct ClipSequence {
 	VideoList* videos;
 	AVFormatContext* outputContext;
 	AVStream* outputStream;
+	int64_t v_firstdts, a_firstdts;
 	int64_t v_lastdts, a_lastdts;
 	int64_t v_currentdts, a_currentdts;
 } ClipSequence;
@@ -30,6 +32,8 @@ int decodeAudioSequence(ClipSequence* sequence, Video* video, AVPacket* packet, 
 
 int encodeAudioSequence(ClipSequence* sequence, Video* video, AVFrame* frame);
 
-int readSequenceFrames(ClipSequence* sequence, Video* video, AVPacket* packet, AVFrame* frame);
+int copySequenceFrames(ClipSequence* sequence, Video* video, AVPacket* packet, AVFrame* frame);
+
+int cutVideo(ClipSequence* sequence, Video* video, int startFrame, int endFrame);
 
 void freeSequence(ClipSequence* sequence);

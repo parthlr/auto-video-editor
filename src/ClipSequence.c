@@ -5,6 +5,8 @@ void initSequence(ClipSequence** sequence) {
 		*sequence = (ClipSequence*)malloc(sizeof(ClipSequence));
 	}
 	(*sequence)->videos = (VideoList*)malloc(sizeof(VideoList));
+	(*sequence)->v_firstdts = 0;
+	(*sequence)->a_firstdts = 0;
 	(*sequence)->v_lastdts = 0;
 	(*sequence)->a_lastdts = 0;
 }
@@ -87,25 +89,13 @@ int findVideoStreams(ClipSequence* sequence, Video* video) {
 	return 0;
 }
 
-int readSequenceFrames(ClipSequence* sequence, Video* video, AVPacket* packet, AVFrame* frame) {
+int copySequenceFrames(ClipSequence* sequence, Video* video, AVPacket* packet, AVFrame* frame) {
 	if (!packet) {
 		printf("[ERROR] Packet not allocated to be read\n");
 		return -1;
 	}
 	if (!frame) {
 		printf("[ERROR] Frame not allocated to be read\n");
-		return -1;
-	}
-	if (prepareVideoOutStream(video) < 0) {
-		printf("[ERROR] Failed to prepare output video stream\n");
-		return -1;
-	}
-	if (prepareAudioOutStream(video) < 0) {
-		printf("[ERROR] Failed to prepare output audio stream\n");
-		return -1;
-	}
-	if (initResampler(video->audioCodecContext_I, video->audioCodecContext_O, &(video->swrContext)) < 0) {
-		printf("[ERROR] Failed to init audio resampler\n");
 		return -1;
 	}
 	while (av_read_frame(video->inputContext, packet) >= 0) {
@@ -146,7 +136,7 @@ int decodeVideoSequence(ClipSequence* sequence, Video* video, AVPacket* packet, 
 		}
 		if (response >= 0) {
 			// Do stuff and encode
-			sequence->v_currentdts = packet->dts;
+			sequence->v_currentdts = packet->dts - sequence->v_firstdts;
 			if (encodeVideoSequence(sequence, video, frame) < 0) {
 				printf("[ERROR] Failed to encode new video\n");
 				return -1;
@@ -176,7 +166,7 @@ int encodeVideoSequence(ClipSequence* sequence, Video* video, AVFrame* frame) {
 			printf("[ERROR] Failed to receive video packet from encoder\n");
 			return response;
 		}
-		packet->duration = 1000;
+		packet->duration = VIDEO_PACKET_DURATION;
 		int64_t cts = packet->pts - packet->dts;
 		packet->dts = sequence->v_currentdts + sequence->v_lastdts + packet->duration;
 		packet->pts = packet->dts + cts;
@@ -208,7 +198,7 @@ int decodeAudioSequence(ClipSequence* sequence, Video* video, AVPacket* packet, 
 		}
 		if (response >= 0) {
 			// Do stuff and encode
-			sequence->a_currentdts = packet->dts;
+			sequence->a_currentdts = packet->dts - sequence->a_firstdts;
 
 			AVFrame* resampledFrame = av_frame_alloc();
 			if (!resampledFrame) {
@@ -252,7 +242,7 @@ int encodeAudioSequence(ClipSequence* sequence, Video* video, AVFrame* frame) {
 			printf("[ERROR] Failed to receive audio packet from encoder\n");
 			return response;
 		}
-		packet->duration = 1000;
+		packet->duration = VIDEO_PACKET_DURATION;
 		int64_t cts = packet->pts - packet->dts;
 		packet->dts = sequence->a_currentdts + sequence->a_lastdts + packet->duration;
 		packet->pts = packet->dts + cts;
@@ -265,6 +255,52 @@ int encodeAudioSequence(ClipSequence* sequence, Video* video, AVFrame* frame) {
 	}
 	av_packet_unref(packet);
 	av_packet_free(&packet);
+	return 0;
+}
+
+int cutVideo(ClipSequence* sequence, Video* video, int startFrame, int endFrame) {
+	if (findPacket(video->inputContext, startFrame, 0) < 0) {
+		printf("[ERROR] Failed to find packet\n");
+	}
+	AVPacket* packet = av_packet_alloc();
+	if (!packet) {
+		printf("[ERROR] Could not allocate packet for cutting video\n");
+		return -1;
+	}
+	AVFrame* frame = av_frame_alloc();
+	if (!frame) {
+		printf("[ERROR] Could not allocate frame for cutting video\n");
+		return -1;
+	}
+	int currentFrame = startFrame;
+	bool v_firstframe = true;
+	bool a_firstframe = true;
+	while (av_read_frame(video->inputContext, packet) >= 0 && currentFrame <= endFrame) {
+		if (packet->stream_index == video->videoStream) {
+			// Only count video frames since seeking is based on 60 fps video frames
+			currentFrame++;
+			if (v_firstframe) {
+				v_firstframe = false;
+				sequence->v_firstdts = packet->dts;
+			}
+			if (decodeVideoSequence(sequence, video, packet, frame) < 0) {
+				printf("[ERROR] Failed to decode and encode video\n");
+				return -1;
+			}
+		} else if (packet->stream_index == video->audioStream) {
+			if (a_firstframe) {
+				a_firstframe = false;
+				sequence->a_firstdts = packet->dts;
+			}
+			if (decodeAudioSequence(sequence, video, packet, frame) < 0) {
+				printf("[ERROR] Failed to decode and encode audio\n");
+				return -1;
+			}
+		}
+		av_packet_unref(packet);
+	}
+	sequence->v_lastdts += sequence->v_currentdts;
+	sequence->a_lastdts += sequence->a_currentdts;
 	return 0;
 }
 

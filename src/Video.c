@@ -205,15 +205,7 @@ int prepareAudioOutStream(Video* video) {
 	return 0;
 }
 
-int readFrames(Video* video, AVPacket* packet, AVFrame* frame) {
-	if (!packet) {
-		printf("[ERROR] Packet not allocated to be read\n");
-		return -1;
-	}
-	if (!frame) {
-		printf("[ERROR] Frame not allocated to be read\n");
-		return -1;
-	}
+int prepareVideoOutput(Video* video) {
 	if (prepareVideoOutStream(video) < 0) {
 		printf("[ERROR] Failed to prepare output video stream\n");
 		return -1;
@@ -224,6 +216,18 @@ int readFrames(Video* video, AVPacket* packet, AVFrame* frame) {
 	}
 	if (initResampler(video->audioCodecContext_I, video->audioCodecContext_O, &(video->swrContext)) < 0) {
 		printf("[ERROR] Failed to init audio resampler\n");
+		return -1;
+	}
+	return 0;
+}
+
+int copyVideoFrames(Video* video, AVPacket* packet, AVFrame* frame) {
+	if (!packet) {
+		printf("[ERROR] Packet not allocated to be read\n");
+		return -1;
+	}
+	if (!frame) {
+		printf("[ERROR] Frame not allocated to be read\n");
 		return -1;
 	}
 	int frameNum = 0;
@@ -387,6 +391,21 @@ int encodeAudio(Video* video, AVFrame* frame) {
 	}
 	av_packet_unref(packet);
 	av_packet_free(&packet);
+	return 0;
+}
+
+int findPacket(AVFormatContext* inputContext, int frameIndex, int stream) {
+	int64_t timebase;
+	if (stream < 0) {
+		timebase = AV_TIME_BASE;
+	} else if (stream >= 0) {
+		timebase = (inputContext->streams[stream]->time_base.den) / inputContext->streams[stream]->time_base.num;
+	}
+	int64_t seekTarget = timebase * frameIndex / VIDEO_DEFAULT_FPS;
+	if (av_seek_frame(inputContext, stream, seekTarget, AVSEEK_FLAG_ANY) < 0) {
+		printf("[ERROR] Failed to find keyframe from frame index %i\n", frameIndex);
+		return -1;
+	}
 	return 0;
 }
 

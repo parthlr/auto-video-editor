@@ -4,6 +4,9 @@
 #include <libswresample/swresample.h>
 #include <string.h>
 
+#define VIDEO_PACKET_DURATION 1000
+#define VIDEO_DEFAULT_FPS 60
+
 typedef struct Video {
 	char* filename;
 	AVFormatContext* inputContext;
@@ -39,6 +42,8 @@ int prepareVideoOutStream(Video* video);
 
 int prepareAudioOutStream(Video* video);
 
+int prepareVideoOutput(Video* video);
+
 int findStreams(Video* video, char* outputFile);
 
 int decodeVideo(Video* video, AVPacket* packet, AVFrame* frame);
@@ -49,6 +54,8 @@ int decodeAudio(Video* video, AVPacket* packet, AVFrame* frame);
 
 int encodeAudio(Video* video, AVFrame* frame);
 
-int readFrames(Video* video, AVPacket* packet, AVFrame* frame);
+int copyVideoFrames(Video* video, AVPacket* packet, AVFrame* frame);
+
+int findPacket(AVFormatContext* inputContext, int frameIndex, int stream);
 
 void freeVideo(Video* video);
