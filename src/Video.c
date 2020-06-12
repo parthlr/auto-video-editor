@@ -13,6 +13,17 @@ void initVideo(Video* video, char* filename) {
 	video->audioStream = -1;
 	video->filename = (char*)malloc(strlen(filename) + 1);
 	strcpy(video->filename, filename);
+	video->lastRGBAvg = 127; // Middle RGB value
+	video->lastAudioAvg = 0.5; // Middle audio sample
+	video->clipIndex = 0;
+}
+
+void initFrameArray(Video* video, int numClips) {
+	video->numClips = numClips;
+	video->frames = (int**)malloc(numClips * sizeof(int*));
+	for (int i = 0; i < numClips; i++) {
+		(video->frames)[i] = (int*)malloc(2 * sizeof(int));
+	}
 }
 
 int initResampler(AVCodecContext* inputContext, AVCodecContext* outputContext, SwrContext** resampleContext) {
@@ -409,6 +420,84 @@ int findPacket(AVFormatContext* inputContext, int frameIndex, int stream) {
 	return 0;
 }
 
+bool isFrameInteresting(Video* video, AVFrame* frame, int stream, double threshold) {
+	if (stream == video->videoStream) {
+		int width = video->videoCodecContext_I->width;
+		int height = video->videoCodecContext_I->height;
+		int r = 0;
+		int g = 0;
+		int b = 0;
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				int p = (x * 3) + (y * frame->linesize[0]);
+				r += frame->data[0][p];
+				g += frame->data[0][p + 1];
+				b += frame->data[0][p + 2];
+			}
+		}
+		int frameArea = height * width;
+		r /= frameArea;
+		b /= frameArea;
+		g /= frameArea;
+		int avgRGB = (r + g + b) / 3;
+		double change = abs(avgRGB - video->lastRGBAvg) / (double)avgRGB;
+		video->lastRGBAvg = avgRGB;
+		if (change >= threshold) {
+			return true;
+		}
+	} else if (stream == video->audioStream) {
+		float* totalSample = (float*)malloc(2 * sizeof(float));
+		for (int i = 0; i < frame->channels; i++) {
+			for (int j = 0; j < frame->nb_samples; j++) {
+				totalSample[i] += frame->data[i][j];
+			}
+		}
+		totalSample[0] /= frame->nb_samples;
+		totalSample[1] /= frame->nb_samples;
+		float avgSample = (totalSample[0] + totalSample[1]) / 2;
+		double change = abs(avgSample - video->lastAudioAvg) / avgSample;
+		video->lastAudioAvg = avgSample;
+		if (change >= threshold) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void initSwsContext(int height, int width, uint8_t** buffer, struct SwsContext** swsContext) {
+	int numBytes = avpicture_get_size(AV_PIX_FMT_RGB24, width, height);
+	*buffer = (uint8_t*)av_malloc(numBytes * sizeof(uint8_t));
+	*swsContext = sws_getContext(width, height, AV_PIX_FMT_YUV420P, width, height, AV_PIX_FMT_RGB24, SWS_BILINEAR, NULL, NULL, NULL);
+}
+
+AVFrame* getRGBFrame(Video* video, AVFrame* frame) {
+	AVFrame* rgbFrame = av_frame_alloc();
+	avpicture_fill((AVPicture*)rgbFrame, video->rgbBuffer, AV_PIX_FMT_RGB24, video->videoCodecContext_I->width, video->videoCodecContext_I->height);
+	sws_scale(video->swsContext, (uint8_t const * const *)frame->data, frame->linesize, 0, video->videoCodecContext_I->height, rgbFrame->data, rgbFrame->linesize);
+	return rgbFrame;
+}
+
+void populateFrameArray(Video* video, int frameIndex) {
+	int startIndex = frameIndex - (VIDEO_DEFAULT_FPS * 3); // Starts 3 seconds before
+	int endIndex = frameIndex + (VIDEO_DEFAULT_FPS * 3);	// Ends 3 seconds after
+	if (startIndex < 0) {
+		startIndex = 0;
+	}
+	if (video->clipIndex < video->numClips) {
+		if (video->clipIndex > 0) {
+			if (startIndex <= (video->frames)[video->clipIndex - 1][1]) {
+				(video->frames)[video->clipIndex - 1][1] = endIndex;
+				printf("Start: %i End: %i\n", (video->frames)[video->clipIndex - 1][0], (video->frames)[video->clipIndex - 1][1]);
+				return;
+			}
+		}
+		(video->frames)[video->clipIndex][0] = startIndex;
+		(video->frames)[video->clipIndex][1] = endIndex;
+		printf("Start: %i End: %i\n", (video->frames)[video->clipIndex][0], (video->frames)[video->clipIndex][1]);
+		video->clipIndex += 1;
+	}
+}
+
 void freeVideo(Video* video) {
 	avcodec_close(video->videoCodecContext_I);
 	avcodec_close(video->audioCodecContext_I);
@@ -418,5 +507,10 @@ void freeVideo(Video* video) {
 	avformat_close_input(&(video->outputContext));
 	avformat_free_context(video->inputContext);
 	avformat_free_context(video->outputContext);
+
+	for (int i = 0; i < video->numClips; i++) {
+		free((video->frames)[i]);
+	}
+	free(video->frames);
 	free(video);
 }

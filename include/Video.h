@@ -2,7 +2,9 @@
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
 #include <libswresample/swresample.h>
+#include <stdbool.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define VIDEO_PACKET_DURATION 1000
 #define VIDEO_DEFAULT_FPS 60
@@ -22,6 +24,13 @@ typedef struct Video {
 	int videoStream;
 	int audioStream;
 	SwrContext* swrContext;
+	struct SwsContext* swsContext;
+	uint8_t* rgbBuffer;
+	int lastRGBAvg;
+	int lastAudioAvg;
+	int** frames;
+	int numClips;
+	int clipIndex;
 } Video;
 
 AVStream* getVideoStream(Video* video);
@@ -29,6 +38,8 @@ AVStream* getVideoStream(Video* video);
 AVStream* getAudioStream(Video* video);
 
 void initVideo(Video* video, char* filename);
+
+void initFrameArray(Video* video, int numClips);
 
 int initResampler(AVCodecContext* inputContext, AVCodecContext* outputContext, SwrContext** resampleContext);
 
@@ -57,5 +68,13 @@ int encodeAudio(Video* video, AVFrame* frame);
 int copyVideoFrames(Video* video, AVPacket* packet, AVFrame* frame);
 
 int findPacket(AVFormatContext* inputContext, int frameIndex, int stream);
+
+bool isFrameInteresting(Video* video, AVFrame* frame, int stream, double threshold);
+
+void initSwsContext(int height, int width, uint8_t** buffer, struct SwsContext** swsContext);
+
+AVFrame* getRGBFrame(Video* video, AVFrame* frame);
+
+void populateFrameArray(Video* video, int frameIndex);
 
 void freeVideo(Video* video);

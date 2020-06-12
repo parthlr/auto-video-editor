@@ -12,13 +12,16 @@ SRC_FILES := $(wildcard $(SRC_DIR)/*.c)
 EXAMPLES_FILES := $(wildcard $(EXAMPLES_DIR)/*.c)
 BIN_FILES := $(SRC_FILES:$(SRC_DIR)/%.c=$(BIN_DIR)/%.o)
 
-test-cut: $(BIN_FILES) $(BIN_DIR)/test-cut.o
-		$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
-
 test-video: $(BIN_FILES) $(BIN_DIR)/test-video.o
 		$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
 test-sequence: $(BIN_FILES) $(BIN_DIR)/test-sequence.o
+		$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
+
+test-cut: $(BIN_FILES) $(BIN_DIR)/test-cut.o
+		$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
+
+test-interesting: $(BIN_FILES) $(BIN_DIR)/test-interesting.o
 		$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
 $(BIN_DIR)/%.o: $(SRC_DIR)/%.c | $(BIN_DIR)

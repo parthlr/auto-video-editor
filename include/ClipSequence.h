@@ -1,6 +1,5 @@
 #include <dirent.h>
 #include <stdio.h>
-#include <stdbool.h>
 #include "VideoList.h"
 
 typedef struct ClipSequence {
@@ -24,15 +23,15 @@ int allocateSequenceOutput(ClipSequence* sequence, char* outputFile);
 
 int findVideoStreams(ClipSequence* sequence, Video* video);
 
-int decodeVideoSequence(ClipSequence* sequence, Video* video, AVPacket* packet, AVFrame* frame);
+int decodeVideoSequence(ClipSequence* sequence, Video* video, AVPacket* packet, int frameIndex, bool copy);
 
 int encodeVideoSequence(ClipSequence* sequence, Video* video, AVFrame* frame);
 
-int decodeAudioSequence(ClipSequence* sequence, Video* video, AVPacket* packet, AVFrame* frame);
+int decodeAudioSequence(ClipSequence* sequence, Video* video, AVPacket* packet, int frameIndex, bool copy);
 
 int encodeAudioSequence(ClipSequence* sequence, Video* video, AVFrame* frame);
 
-int copySequenceFrames(ClipSequence* sequence, Video* video, AVPacket* packet, AVFrame* frame);
+int copySequenceFrames(ClipSequence* sequence, Video* video, bool copy);
 
 int cutVideo(ClipSequence* sequence, Video* video, int startFrame, int endFrame);
 
