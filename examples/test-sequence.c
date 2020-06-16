@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
 			printf("[ERROR] Failed to prepare video output\n");
 			return -1;
 		}
-		if (copySequenceFrames(sequence, currentNode->video, true) < 0) {
+		if (copySequenceFrames(sequence, currentNode->video) < 0) {
 			printf("[ERROR] Failed to read and write new video\n");
 			return -1;
 		}

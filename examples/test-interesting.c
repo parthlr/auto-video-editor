@@ -25,10 +25,26 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
-	if (copySequenceFrames(sequence, video, false) < 0) {
+	// Comment out if using dummy values
+	if (analyzeVideo(sequence, video) < 0) {
 		printf("[ERROR] Failed to read and write new video\n");
 		return -1;
 	}
+
+	// Dummy values for testing without having having to analyze video
+	/*(video->frames)[0][0] = 0;
+	(video->frames)[0][1] = 370;
+	(video->frames)[1][0] = 1205;
+	(video->frames)[1][1] = 1520;
+	(video->frames)[2][0] = 10202;
+	(video->frames)[2][1] = 12050;
+	(video->frames)[3][0] = 36283;
+	(video->frames)[3][1] = 36590;
+	(video->frames)[4][0] = 40765;
+	(video->frames)[4][1] = 41234;
+	(video->frames)[5][0] = 50123;
+	(video->frames)[5][1] = 51654;
+	video->clipIndex = 6;*/
 
 	printf("Done analyzing video\n");
 

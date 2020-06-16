@@ -91,24 +91,20 @@ int findVideoStreams(ClipSequence* sequence, Video* video) {
 	return 0;
 }
 
-int copySequenceFrames(ClipSequence* sequence, Video* video, bool copy) {
+int copySequenceFrames(ClipSequence* sequence, Video* video) {
 	AVPacket* packet = av_packet_alloc();
 	if (!packet) {
 		printf("[ERROR] Packet not allocated to be read\n");
 		return -1;
 	}
-	initSwsContext(video->videoCodecContext_I->height, video->videoCodecContext_I->width, &(video->rgbBuffer), &(video->swsContext));
-
-	int currentFrame = 0;
 	while (av_read_frame(video->inputContext, packet) >= 0) {
 		if (packet->stream_index == video->videoStream) {
-			if (decodeVideoSequence(sequence, video, packet, currentFrame, copy) < 0) {
+			if (decodeVideoSequence(sequence, video, packet, -1, true) < 0) {
 				printf("[ERROR] Failed to decode and encode video\n");
 				return -1;
 			}
-			currentFrame++;
 		} else if (packet->stream_index == video->audioStream) {
-			if (decodeAudioSequence(sequence, video, packet, currentFrame, copy) < 0) {
+			if (decodeAudioSequence(sequence, video, packet, -1, true) < 0) {
 				printf("[ERROR] Failed to decode and encode audio\n");
 				return -1;
 			}
@@ -117,9 +113,6 @@ int copySequenceFrames(ClipSequence* sequence, Video* video, bool copy) {
 	}
 	sequence->v_lastdts += sequence->v_currentdts;
 	sequence->a_lastdts += sequence->a_currentdts;
-	// Flush encoder
-	//encodeVideoSequence(sequence, video, NULL);
-	//encodeAudioSequence(sequence, video, NULL);
 	return 0;
 }
 
@@ -149,7 +142,7 @@ int decodeVideoSequence(ClipSequence* sequence, Video* video, AVPacket* packet, 
 				}
 			} else {
 				AVFrame* rgbFrame = getRGBFrame(video, frame);
-				bool interesting = isFrameInteresting(video, rgbFrame, video->videoStream, 0.07);
+				bool interesting = isFrameInteresting(video, rgbFrame, video->videoStream, 0.3);
 				if (interesting) {
 					populateFrameArray(video, frameIndex);
 				}
@@ -180,9 +173,10 @@ int encodeVideoSequence(ClipSequence* sequence, Video* video, AVFrame* frame) {
 			return response;
 		}
 		packet->duration = VIDEO_PACKET_DURATION;
-		int64_t cts = packet->pts - packet->dts;
+		//int64_t cts = packet->pts - packet->dts;
 		packet->dts = sequence->v_currentdts + sequence->v_lastdts + packet->duration;
-		packet->pts = packet->dts + cts;
+		packet->pts = packet->dts;
+		//packet->pts = packet->dts + cts;
 		packet->stream_index = video->videoStream;
 		response = av_interleaved_write_frame(sequence->outputContext, packet);
 		if (response < 0) {
@@ -262,10 +256,11 @@ int encodeAudioSequence(ClipSequence* sequence, Video* video, AVFrame* frame) {
 			printf("[ERROR] Failed to receive audio packet from encoder\n");
 			return response;
 		}
-		packet->duration = VIDEO_PACKET_DURATION;
-		int64_t cts = packet->pts - packet->dts;
+		packet->duration = frame->sample_rate / VIDEO_DEFAULT_FPS;//VIDEO_PACKET_DURATION;
+		//int64_t cts = packet->pts - packet->dts;
 		packet->dts = sequence->a_currentdts + sequence->a_lastdts + packet->duration;
-		packet->pts = packet->dts + cts;
+		packet->pts = packet->dts;
+		//packet->pts = packet->dts + cts;
 		packet->stream_index = video->audioStream;
 		response = av_interleaved_write_frame(sequence->outputContext, packet);
 		if (response < 0) {
@@ -275,6 +270,32 @@ int encodeAudioSequence(ClipSequence* sequence, Video* video, AVFrame* frame) {
 	}
 	av_packet_unref(packet);
 	av_packet_free(&packet);
+	return 0;
+}
+
+int analyzeVideo(ClipSequence* sequence, Video* video) {
+	AVPacket* packet = av_packet_alloc();
+	if (!packet) {
+		printf("[ERROR] Packet not allocated to be read\n");
+		return -1;
+	}
+	initSwsContext(video->videoCodecContext_I->height, video->videoCodecContext_I->width, &(video->rgbBuffer), &(video->swsContext));
+	int currentFrame = 0;
+	while (av_read_frame(video->inputContext, packet) >= 0) {
+		if (packet->stream_index == video->videoStream) {
+			if (decodeVideoSequence(sequence, video, packet, currentFrame, false) < 0) {
+				printf("[ERROR] Failed to decode and encode video\n");
+				return -1;
+			}
+			currentFrame++;
+		} else if (packet->stream_index == video->audioStream) {
+			if (decodeAudioSequence(sequence, video, packet, currentFrame, false) < 0) {
+				printf("[ERROR] Failed to decode and encode audio\n");
+				return -1;
+			}
+		}
+		av_packet_unref(packet);
+	}
 	return 0;
 }
 
@@ -316,13 +337,14 @@ int cutVideo(ClipSequence* sequence, Video* video, int startFrame, int endFrame)
 		av_packet_unref(packet);
 	}
 	// Gives an error while encoding but it's the only solution that works
-	sequence->v_lastdts += sequence->v_currentdts - (1.5 * VIDEO_PACKET_DURATION);
-	sequence->a_lastdts += sequence->a_currentdts - (1.5 * VIDEO_PACKET_DURATION);
+	sequence->v_lastdts += sequence->v_currentdts;
+	sequence->a_lastdts += sequence->a_currentdts + VIDEO_DEFAULT_SAMPLE_COUNT;
 	return 0;
 }
 
 void freeSequence(ClipSequence* sequence) {
 	avformat_close_input(&(sequence->outputContext));
 	avformat_free_context(sequence->outputContext);
+	free(sequence->videos);
 	free(sequence);
 }

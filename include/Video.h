@@ -8,6 +8,7 @@
 
 #define VIDEO_PACKET_DURATION 1000
 #define VIDEO_DEFAULT_FPS 60
+#define VIDEO_DEFAULT_SAMPLE_COUNT 1152
 
 typedef struct Video {
 	char* filename;

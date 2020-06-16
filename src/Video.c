@@ -479,7 +479,7 @@ AVFrame* getRGBFrame(Video* video, AVFrame* frame) {
 
 void populateFrameArray(Video* video, int frameIndex) {
 	int startIndex = frameIndex - (VIDEO_DEFAULT_FPS * 3); // Starts 3 seconds before
-	int endIndex = frameIndex + (VIDEO_DEFAULT_FPS * 3);	// Ends 3 seconds after
+	int endIndex = frameIndex + (VIDEO_DEFAULT_FPS * 2);	// Ends 2 seconds after
 	if (startIndex < 0) {
 		startIndex = 0;
 	}
