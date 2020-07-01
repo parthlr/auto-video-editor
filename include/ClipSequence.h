@@ -33,6 +33,8 @@ int encodeAudioSequence(ClipSequence* sequence, Video* video, AVFrame* frame);
 
 int copySequenceFrames(ClipSequence* sequence, Video* video);
 
+int transcodeSequence(ClipSequence* sequence, Video* video);
+
 int analyzeVideo(ClipSequence* sequence, Video* video);
 
 int cutVideo(ClipSequence* sequence, Video* video, int startFrame, int endFrame);

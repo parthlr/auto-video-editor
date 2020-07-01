@@ -37,12 +37,19 @@ int main(int argc, char* argv[]) {
 		if (index == 0) {
 			writeHeader(sequence->outputContext);
 		}
-		if (prepareVideoOutput(video) < 0) {
+
+		// Uncomment if transcoding
+		/*if (prepareVideoOutput(video) < 0) {
 			printf("[ERROR] Failed to prepare video output\n");
 			return -1;
 		}
+		if (transcodeSequence(sequence, currentNode->video) < 0) {
+			printf("[ERROR] Failed to transcode new video\n");
+			return -1;
+		}*/
+		
 		if (copySequenceFrames(sequence, currentNode->video) < 0) {
-			printf("[ERROR] Failed to read and write new video\n");
+			printf("[ERROR] Failed to copy new video\n");
 			return -1;
 		}
 		freeVideo(currentNode->video); // Frees all codecs and contexts

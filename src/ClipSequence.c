@@ -99,6 +99,37 @@ int copySequenceFrames(ClipSequence* sequence, Video* video) {
 	}
 	while (av_read_frame(video->inputContext, packet) >= 0) {
 		if (packet->stream_index == video->videoStream) {
+			sequence->v_currentdts = packet->dts;
+			packet->duration = VIDEO_PACKET_DURATION;
+			packet->dts = sequence->v_currentdts + sequence->v_lastdts + packet->duration;
+			packet->pts = packet->dts;
+			packet->stream_index = video->videoStream;
+		} else if (packet->stream_index == video->audioStream) {
+			sequence->a_currentdts = packet->dts;
+			packet->duration = 1000;//frame->sample_rate / VIDEO_DEFAULT_FPS;
+			packet->dts = sequence->a_currentdts + sequence->a_lastdts + packet->duration;
+			packet->pts = packet->dts;
+			packet->stream_index = video->audioStream;
+		}
+		if (av_interleaved_write_frame(sequence->outputContext, packet) < 0) {
+			printf("[ERROR] Failed to write video packet\n");
+			break;
+		}
+		av_packet_unref(packet);
+	}
+	sequence->v_lastdts += sequence->v_currentdts;
+	sequence->a_lastdts += sequence->a_currentdts;
+	return 0;
+}
+
+int transcodeSequence(ClipSequence* sequence, Video* video) {
+	AVPacket* packet = av_packet_alloc();
+	if (!packet) {
+		printf("[ERROR] Packet not allocated to be read\n");
+		return -1;
+	}
+	while (av_read_frame(video->inputContext, packet) >= 0) {
+		if (packet->stream_index == video->videoStream) {
 			if (decodeVideoSequence(sequence, video, packet, -1, true) < 0) {
 				printf("[ERROR] Failed to decode and encode video\n");
 				return -1;
@@ -226,7 +257,7 @@ int decodeAudioSequence(ClipSequence* sequence, Video* video, AVPacket* packet, 
 					return -1;
 				}
 			} else {
-				bool interesting = isFrameInteresting(video, frame, video->audioStream, 1.0);
+				bool interesting = isFrameInteresting(video, frame, video->audioStream, 0.55);
 				if (interesting) {
 					populateFrameArray(video, frameIndex);
 				}
@@ -256,7 +287,7 @@ int encodeAudioSequence(ClipSequence* sequence, Video* video, AVFrame* frame) {
 			printf("[ERROR] Failed to receive audio packet from encoder\n");
 			return response;
 		}
-		packet->duration = frame->sample_rate / VIDEO_DEFAULT_FPS;//VIDEO_PACKET_DURATION;
+		packet->duration = frame->sample_rate / VIDEO_DEFAULT_FPS;
 		//int64_t cts = packet->pts - packet->dts;
 		packet->dts = sequence->a_currentdts + sequence->a_lastdts + packet->duration;
 		packet->pts = packet->dts;
@@ -320,24 +351,46 @@ int cutVideo(ClipSequence* sequence, Video* video, int startFrame, int endFrame)
 				v_firstframe = false;
 				sequence->v_firstdts = packet->dts;
 			}
-			if (decodeVideoSequence(sequence, video, packet, -1, true) < 0) {
+			/*if (decodeVideoSequence(sequence, video, packet, -1, true) < 0) {
 				printf("[ERROR] Failed to decode and encode video\n");
 				return -1;
+			}*/
+			sequence->v_currentdts = packet->dts - sequence->v_firstdts;
+			packet->duration = VIDEO_PACKET_DURATION;
+			int64_t cts = packet->pts - packet->dts;
+			packet->dts = sequence->v_currentdts + sequence->v_lastdts + packet->duration;
+			//packet->pts = packet->dts;
+			packet->pts = packet->dts + cts;
+			packet->stream_index = video->videoStream;
+			if (av_interleaved_write_frame(sequence->outputContext, packet) < 0) {
+				printf("[ERROR] Failed to write video packet\n");
+				//break;
 			}
 		} else if (packet->stream_index == video->audioStream) {
 			if (a_firstframe) {
 				a_firstframe = false;
 				sequence->a_firstdts = packet->dts;
 			}
-			if (decodeAudioSequence(sequence, video, packet, -1, true) < 0) {
+			/*if (decodeAudioSequence(sequence, video, packet, -1, true) < 0) {
 				printf("[ERROR] Failed to decode and encode audio\n");
 				return -1;
+			}*/
+			sequence->a_currentdts = packet->dts - sequence->a_firstdts;
+			packet->duration = 1000;//frame->sample_rate / VIDEO_DEFAULT_FPS;
+			int64_t cts = packet->pts - packet->dts;
+			packet->dts = sequence->a_currentdts + sequence->a_lastdts + packet->duration;
+			//packet->pts = packet->dts;
+			packet->pts = packet->dts + cts;
+			packet->stream_index = video->audioStream;
+			if (av_interleaved_write_frame(sequence->outputContext, packet) < 0) {
+				printf("[ERROR] Failed to write audio packet\n");
+				//break;
 			}
 		}
 		av_packet_unref(packet);
 	}
 	// Gives an error while encoding but it's the only solution that works
-	sequence->v_lastdts += sequence->v_currentdts;
+	sequence->v_lastdts += sequence->v_currentdts + (1.5 * VIDEO_PACKET_DURATION);
 	sequence->a_lastdts += sequence->a_currentdts + VIDEO_DEFAULT_SAMPLE_COUNT;
 	return 0;
 }

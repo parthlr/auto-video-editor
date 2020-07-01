@@ -14,7 +14,7 @@ void initVideo(Video* video, char* filename) {
 	video->filename = (char*)malloc(strlen(filename) + 1);
 	strcpy(video->filename, filename);
 	video->lastRGBAvg = 127; // Middle RGB value
-	video->lastAudioAvg = 0.5; // Middle audio sample
+	video->lastAudioAvg = 127; // Middle audio sample
 	video->clipIndex = 0;
 }
 
@@ -168,6 +168,7 @@ int prepareVideoOutStream(Video* video) {
 		printf("[ERROR] Failed to allocate memory for video output codec context\n");
 		return -1;
 	}
+	//av_opt_set(video->videoCodecContext_O->priv_data, "preset", "slow", 0);
 	video->videoCodecContext_O->bit_rate = video->videoCodecContext_I->bit_rate;
 	video->videoCodecContext_O->width = video->videoCodecContext_I->width;
 	video->videoCodecContext_O->height = video->videoCodecContext_I->height;
@@ -232,11 +233,42 @@ int prepareVideoOutput(Video* video) {
 	return 0;
 }
 
-int copyVideoFrames(Video* video, AVPacket* packet, AVFrame* frame) {
+int copyVideoFrames(Video* video) {
+	AVPacket* packet = av_packet_alloc();
 	if (!packet) {
 		printf("[ERROR] Packet not allocated to be read\n");
 		return -1;
 	}
+	while (av_read_frame(video->inputContext, packet) >= 0) {
+		if (packet->stream_index == video->videoStream) {
+			packet->stream_index = video->videoStream;
+			video->inputStream = getVideoStream(video);
+		} else if (packet->stream_index == video->audioStream) {
+			packet->stream_index = video->audioStream;
+			video->inputStream = getAudioStream(video);
+		}
+		video->outputStream = video->outputContext->streams[packet->stream_index];
+		packet->pts = av_rescale_q_rnd(packet->pts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
+		packet->dts = av_rescale_q_rnd(packet->dts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
+		packet->duration = av_rescale_q(packet->duration, video->inputStream->time_base, video->outputStream->time_base);
+		packet->pos = -1;
+
+		if (av_interleaved_write_frame(video->outputContext, packet) < 0) {
+			printf("[ERROR] Failed to write packet\n");
+			break;
+		}
+		av_packet_unref(packet);
+	}
+	return 0;
+}
+
+int transcodeVideo(Video* video) {
+	AVPacket* packet = av_packet_alloc();
+	if (!packet) {
+		printf("[ERROR] Packet not allocated to be read\n");
+		return -1;
+	}
+	AVFrame* frame = av_frame_alloc();
 	if (!frame) {
 		printf("[ERROR] Frame not allocated to be read\n");
 		return -1;
@@ -245,12 +277,12 @@ int copyVideoFrames(Video* video, AVPacket* packet, AVFrame* frame) {
 	while (av_read_frame(video->inputContext, packet) >= 0) {
 		printf("[READ] Reading frame %i\n", frameNum);
 		if (packet->stream_index == video->videoStream) {
-			if (decodeVideo(video, packet, frame) < 0) {
+			if (decodeVideo(video, packet) < 0) {
 				printf("[ERROR] Failed to decode and encode video\n");
 				return -1;
 			}
 		} else if (packet->stream_index == video->audioStream) {
-			if (decodeAudio(video, packet, frame) < 0) {
+			if (decodeAudio(video, packet) < 0) {
 				printf("[ERROR] Failed to decode and encode audio\n");
 				return -1;
 			}
@@ -264,12 +296,13 @@ int copyVideoFrames(Video* video, AVPacket* packet, AVFrame* frame) {
 	return 0;
 }
 
-int decodeVideo(Video* video, AVPacket* packet, AVFrame* frame) {
+int decodeVideo(Video* video, AVPacket* packet) {
 	int response = avcodec_send_packet(video->videoCodecContext_I, packet);
 	if (response < 0) {
 		printf("[ERROR] Failed to send video packet to decoder\n");
 		return response;
 	}
+	AVFrame* frame = av_frame_alloc();
 	while (response >= 0) {
 		response = avcodec_receive_frame(video->videoCodecContext_I, frame);
 		if (response == AVERROR(EAGAIN) || response == AVERROR_EOF) {
@@ -328,12 +361,13 @@ int encodeVideo(Video* video, AVFrame* frame) {
 	return 0;
 }
 
-int decodeAudio(Video* video, AVPacket* packet, AVFrame* frame) {
+int decodeAudio(Video* video, AVPacket* packet) {
 	int response = avcodec_send_packet(video->audioCodecContext_I, packet);
 	if (response < 0) {
 		printf("[ERROR] Failed to send audio packet to decoder\n");
 		return response;
 	}
+	AVFrame* frame = av_frame_alloc();
 	while (response >= 0) {
 		response = avcodec_receive_frame(video->audioCodecContext_I, frame);
 		if (response == AVERROR(EAGAIN) || response == AVERROR_EOF) {
@@ -446,18 +480,31 @@ bool isFrameInteresting(Video* video, AVFrame* frame, int stream, double thresho
 			return true;
 		}
 	} else if (stream == video->audioStream) {
-		float* totalSample = (float*)malloc(2 * sizeof(float));
+		float* totalSample = (float*)malloc(frame->channels * sizeof(float));
 		for (int i = 0; i < frame->channels; i++) {
 			for (int j = 0; j < frame->nb_samples; j++) {
-				totalSample[i] += frame->data[i][j];
+				totalSample[i] += fabs(frame->data[i][j]);
 			}
 		}
-		totalSample[0] /= frame->nb_samples;
-		totalSample[1] /= frame->nb_samples;
-		float avgSample = (totalSample[0] + totalSample[1]) / 2;
-		double change = abs(avgSample - video->lastAudioAvg) / avgSample;
-		video->lastAudioAvg = avgSample;
-		if (change >= threshold) {
+		for (int i = 0; i < frame->channels; i++) {
+			totalSample[i] /= frame->nb_samples;
+			totalSample[i] /= 255.0f;
+		}
+		float maxAvgSample = 0.0f;
+		for (int i = 0; i < frame->channels; i++) {
+			if (totalSample[i] > maxAvgSample) {
+				maxAvgSample = totalSample[i];
+			}
+		}
+		/*if (totalSample[0] > totalSample[1]) {
+			maxAvgSample = totalSample[0];
+		} else if (totalSample[0] <= totalSample[1]) {
+			maxAvgSample = totalSample[1];
+		}*/
+		//double change = (double)fabs(maxAvgSample - video->lastAudioAvg) / (double)maxAvgSample;
+		//video->lastAudioAvg = maxAvgSample;
+		//printf("Max: %.6f\n", maxAvgSample);
+		if ((double)maxAvgSample >= threshold) {
 			return true;
 		}
 	}

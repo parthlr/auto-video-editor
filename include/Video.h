@@ -28,7 +28,7 @@ typedef struct Video {
 	struct SwsContext* swsContext;
 	uint8_t* rgbBuffer;
 	int lastRGBAvg;
-	int lastAudioAvg;
+	float lastAudioAvg;
 	int** frames;
 	int numClips;
 	int clipIndex;
@@ -58,15 +58,17 @@ int prepareVideoOutput(Video* video);
 
 int findStreams(Video* video, char* outputFile);
 
-int decodeVideo(Video* video, AVPacket* packet, AVFrame* frame);
+int decodeVideo(Video* video, AVPacket* packet);
 
 int encodeVideo(Video* video, AVFrame* frame);
 
-int decodeAudio(Video* video, AVPacket* packet, AVFrame* frame);
+int decodeAudio(Video* video, AVPacket* packet);
 
 int encodeAudio(Video* video, AVFrame* frame);
 
-int copyVideoFrames(Video* video, AVPacket* packet, AVFrame* frame);
+int copyVideoFrames(Video* video);
+
+int transcodeVideo(Video* video);
 
 int findPacket(AVFormatContext* inputContext, int frameIndex, int stream);
 

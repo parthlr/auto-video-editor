@@ -9,13 +9,18 @@ int main(int argc, char* argv[]) {
 	}
 
 	writeHeader(video->outputContext);
-	if (prepareVideoOutput(video) < 0) {
+
+	// Uncomment if transcoding
+	/*if (prepareVideoOutput(video) < 0) {
 		printf("[ERROR] Failed to prepare video output\n");
 		return -1;
 	}
-	AVFrame* frame = av_frame_alloc();
-	AVPacket* packet = av_packet_alloc();
-	if (copyVideoFrames(video, packet, frame) < 0) {
+	if (transcodeVideo(video) < 0) {
+		printf("[ERROR] Failed to transcode video\n");
+		return -1;
+	}*/
+	
+	if (copyVideoFrames(video) < 0) {
 		printf("[ERROR] Failed to read and write new video\n");
 		return -1;
 	}

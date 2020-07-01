@@ -26,13 +26,13 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Comment out if using dummy values
-	if (analyzeVideo(sequence, video) < 0) {
+	/*if (analyzeVideo(sequence, video) < 0) {
 		printf("[ERROR] Failed to read and write new video\n");
 		return -1;
-	}
+	}*/
 
 	// Dummy values for testing without having having to analyze video
-	/*(video->frames)[0][0] = 0;
+	(video->frames)[0][0] = 0;
 	(video->frames)[0][1] = 370;
 	(video->frames)[1][0] = 1205;
 	(video->frames)[1][1] = 1520;
@@ -44,15 +44,15 @@ int main(int argc, char* argv[]) {
 	(video->frames)[4][1] = 41234;
 	(video->frames)[5][0] = 50123;
 	(video->frames)[5][1] = 51654;
-	video->clipIndex = 6;*/
+	video->clipIndex = 6;
 
 	printf("Done analyzing video\n");
 
 	writeHeader(sequence->outputContext);
-	if (prepareVideoOutput(video) < 0) {
+	/*if (prepareVideoOutput(video) < 0) {
 		printf("[ERROR] Failed to prepare video output\n");
 		return -1;
-	}
+	}*/
 
 	for (int i = 0; i < video->clipIndex; i++) {
 		cutVideo(sequence, video, (video->frames)[i][0], (video->frames)[i][1]);
