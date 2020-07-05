@@ -111,9 +111,13 @@ int copySequenceFrames(ClipSequence* sequence, Video* video) {
 			packet->pts = packet->dts;
 			packet->stream_index = video->audioStream;
 		}
+		video->inputStream = getStream(video->inputContext, packet->stream_index);
+		sequence->outputStream = getStream(sequence->outputContext, packet->stream_index);
+		packet->pts = av_rescale_q_rnd(packet->pts, video->inputStream->time_base, sequence->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
+		packet->dts = av_rescale_q_rnd(packet->dts, video->inputStream->time_base, sequence->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
+		packet->duration = av_rescale_q(packet->duration, video->inputStream->time_base, sequence->outputStream->time_base);
 		if (av_interleaved_write_frame(sequence->outputContext, packet) < 0) {
 			printf("[ERROR] Failed to write video packet\n");
-			break;
 		}
 		av_packet_unref(packet);
 	}
@@ -204,10 +208,8 @@ int encodeVideoSequence(ClipSequence* sequence, Video* video, AVFrame* frame) {
 			return response;
 		}
 		packet->duration = VIDEO_PACKET_DURATION;
-		//int64_t cts = packet->pts - packet->dts;
 		packet->dts = sequence->v_currentdts + sequence->v_lastdts + packet->duration;
 		packet->pts = packet->dts;
-		//packet->pts = packet->dts + cts;
 		packet->stream_index = video->videoStream;
 		response = av_interleaved_write_frame(sequence->outputContext, packet);
 		if (response < 0) {
@@ -257,7 +259,7 @@ int decodeAudioSequence(ClipSequence* sequence, Video* video, AVPacket* packet, 
 					return -1;
 				}
 			} else {
-				bool interesting = isFrameInteresting(video, frame, video->audioStream, 0.55);
+				bool interesting = isFrameInteresting(video, frame, video->audioStream, 1.0);
 				if (interesting) {
 					populateFrameArray(video, frameIndex);
 				}
@@ -288,10 +290,8 @@ int encodeAudioSequence(ClipSequence* sequence, Video* video, AVFrame* frame) {
 			return response;
 		}
 		packet->duration = frame->sample_rate / VIDEO_DEFAULT_FPS;
-		//int64_t cts = packet->pts - packet->dts;
 		packet->dts = sequence->a_currentdts + sequence->a_lastdts + packet->duration;
 		packet->pts = packet->dts;
-		//packet->pts = packet->dts + cts;
 		packet->stream_index = video->audioStream;
 		response = av_interleaved_write_frame(sequence->outputContext, packet);
 		if (response < 0) {
@@ -344,6 +344,10 @@ int cutVideo(ClipSequence* sequence, Video* video, int startFrame, int endFrame)
 	bool v_firstframe = true;
 	bool a_firstframe = true;
 	while (av_read_frame(video->inputContext, packet) >= 0 && currentFrame <= endFrame) {
+		video->inputStream = getStream(video->inputContext, packet->stream_index);
+		sequence->outputStream = getStream(sequence->outputContext, packet->stream_index);
+		packet->pts = av_rescale_q_rnd(packet->pts, video->inputStream->time_base, sequence->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
+		packet->dts = av_rescale_q_rnd(packet->dts, video->inputStream->time_base, sequence->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 		if (packet->stream_index == video->videoStream) {
 			// Only count video frames since seeking is based on 60 fps video frames
 			currentFrame++;
@@ -351,46 +355,27 @@ int cutVideo(ClipSequence* sequence, Video* video, int startFrame, int endFrame)
 				v_firstframe = false;
 				sequence->v_firstdts = packet->dts;
 			}
-			/*if (decodeVideoSequence(sequence, video, packet, -1, true) < 0) {
-				printf("[ERROR] Failed to decode and encode video\n");
-				return -1;
-			}*/
 			sequence->v_currentdts = packet->dts - sequence->v_firstdts;
 			packet->duration = VIDEO_PACKET_DURATION;
-			int64_t cts = packet->pts - packet->dts;
 			packet->dts = sequence->v_currentdts + sequence->v_lastdts + packet->duration;
-			//packet->pts = packet->dts;
-			packet->pts = packet->dts + cts;
-			packet->stream_index = video->videoStream;
-			if (av_interleaved_write_frame(sequence->outputContext, packet) < 0) {
-				printf("[ERROR] Failed to write video packet\n");
-				//break;
-			}
+			packet->pts = packet->dts;
 		} else if (packet->stream_index == video->audioStream) {
 			if (a_firstframe) {
 				a_firstframe = false;
 				sequence->a_firstdts = packet->dts;
 			}
-			/*if (decodeAudioSequence(sequence, video, packet, -1, true) < 0) {
-				printf("[ERROR] Failed to decode and encode audio\n");
-				return -1;
-			}*/
 			sequence->a_currentdts = packet->dts - sequence->a_firstdts;
-			packet->duration = 1000;//frame->sample_rate / VIDEO_DEFAULT_FPS;
-			int64_t cts = packet->pts - packet->dts;
+			packet->duration = VIDEO_DEFAULT_SAMPLE_RATE / VIDEO_DEFAULT_FPS;
 			packet->dts = sequence->a_currentdts + sequence->a_lastdts + packet->duration;
-			//packet->pts = packet->dts;
-			packet->pts = packet->dts + cts;
-			packet->stream_index = video->audioStream;
-			if (av_interleaved_write_frame(sequence->outputContext, packet) < 0) {
-				printf("[ERROR] Failed to write audio packet\n");
-				//break;
-			}
+			packet->pts = packet->dts;
+		}
+		if (av_interleaved_write_frame(sequence->outputContext, packet) < 0) {
+			printf("[ERROR] Failed to write video packet\n");
 		}
 		av_packet_unref(packet);
 	}
 	// Gives an error while encoding but it's the only solution that works
-	sequence->v_lastdts += sequence->v_currentdts + (1.5 * VIDEO_PACKET_DURATION);
+	sequence->v_lastdts += sequence->v_currentdts;
 	sequence->a_lastdts += sequence->a_currentdts + VIDEO_DEFAULT_SAMPLE_COUNT;
 	return 0;
 }

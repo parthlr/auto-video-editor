@@ -39,20 +39,11 @@ int initResampler(AVCodecContext* inputContext, AVCodecContext* outputContext, S
 	return 0;
 }
 
-AVStream* getVideoStream(Video* video) {
-	int videoStream = video->videoStream;
-	if (videoStream == -1) {
+AVStream* getStream(AVFormatContext* formatContext, int streamIndex) {
+	if (streamIndex < 0) {
 		return NULL;
 	}
-	return video->inputContext->streams[videoStream];
-}
-
-AVStream* getAudioStream(Video* video) {
-	int audioStream = video->audioStream;
-	if (audioStream == -1) {
-		return NULL;
-	}
-	return video->inputContext->streams[audioStream];
+	return formatContext->streams[streamIndex];
 }
 
 int findStreams(Video* video, char* outputFile) {
@@ -158,7 +149,7 @@ int prepareStreamInfo(AVCodecContext** codecContext, AVCodec** codec, AVStream* 
 }
 
 int prepareVideoOutStream(Video* video) {
-	video->videoCodec = avcodec_find_encoder(getVideoStream(video)->codecpar->codec_id);
+	video->videoCodec = avcodec_find_encoder(getStream(video->inputContext, video->videoStream)->codecpar->codec_id);
 	if (!video->videoCodec) {
 		printf("[ERROR] Failed to find video output codec\n");
 		return -1;
@@ -181,7 +172,7 @@ int prepareVideoOutStream(Video* video) {
 		printf("[ERROR] Failed to open video output codec\n");
 		return -1;
 	}
-	if (avcodec_parameters_from_context(getVideoStream(video)->codecpar, video->videoCodecContext_O) < 0) {
+	if (avcodec_parameters_from_context(getStream(video->inputContext, video->videoStream)->codecpar, video->videoCodecContext_O) < 0) {
 		printf("[ERROR] Failed to fill video stream\n");
 		return -1;
 	}
@@ -210,7 +201,7 @@ int prepareAudioOutStream(Video* video) {
 		printf("[ERROR] Failed to open audio output codec\n");
 		return -1;
 	}
-	if (avcodec_parameters_from_context(getAudioStream(video)->codecpar, video->audioCodecContext_O) < 0) {
+	if (avcodec_parameters_from_context(getStream(video->inputContext, video->audioStream)->codecpar, video->audioCodecContext_O) < 0) {
 		printf("[ERROR] Failed to fill audio stream\n");
 		return -1;
 	}
@@ -242,12 +233,11 @@ int copyVideoFrames(Video* video) {
 	while (av_read_frame(video->inputContext, packet) >= 0) {
 		if (packet->stream_index == video->videoStream) {
 			packet->stream_index = video->videoStream;
-			video->inputStream = getVideoStream(video);
 		} else if (packet->stream_index == video->audioStream) {
 			packet->stream_index = video->audioStream;
-			video->inputStream = getAudioStream(video);
 		}
-		video->outputStream = video->outputContext->streams[packet->stream_index];
+		video->inputStream = getStream(video->inputContext, packet->stream_index);
+		sequence->outputStream = getStream(sequence->outputContext, packet->stream_index);
 		packet->pts = av_rescale_q_rnd(packet->pts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 		packet->dts = av_rescale_q_rnd(packet->dts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 		packet->duration = av_rescale_q(packet->duration, video->inputStream->time_base, video->outputStream->time_base);
@@ -343,8 +333,8 @@ int encodeVideo(Video* video, AVFrame* frame) {
 			return response;
 		}
 		packet->stream_index = video->videoStream;
-		video->inputStream = getVideoStream(video);
-		video->outputStream = video->outputContext->streams[packet->stream_index];
+		video->inputStream = getStream(video->inputContext, packet->stream_index);
+		sequence->outputStream = getStream(sequence->outputContext, packet->stream_index);
 		packet->pts = av_rescale_q_rnd(packet->pts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 		packet->dts = av_rescale_q_rnd(packet->dts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 		packet->duration = av_rescale_q(packet->duration, video->inputStream->time_base, video->outputStream->time_base);
@@ -421,8 +411,8 @@ int encodeAudio(Video* video, AVFrame* frame) {
 			return response;
 		}
 		packet->stream_index = video->audioStream;
-		video->inputStream = getAudioStream(video);
-		video->outputStream = video->outputContext->streams[packet->stream_index];
+		video->inputStream = getStream(video->inputContext, packet->stream_index);
+		sequence->outputStream = getStream(sequence->outputContext, packet->stream_index);
 		packet->pts = av_rescale_q_rnd(packet->pts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 		packet->dts = av_rescale_q_rnd(packet->dts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 		packet->duration = av_rescale_q(packet->duration, video->inputStream->time_base, video->outputStream->time_base);

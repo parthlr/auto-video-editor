@@ -8,7 +8,8 @@
 
 #define VIDEO_PACKET_DURATION 1000
 #define VIDEO_DEFAULT_FPS 60
-#define VIDEO_DEFAULT_SAMPLE_COUNT 1152
+#define VIDEO_DEFAULT_SAMPLE_COUNT 1024
+#define VIDEO_DEFAULT_SAMPLE_RATE 44100
 
 typedef struct Video {
 	char* filename;
@@ -34,9 +35,7 @@ typedef struct Video {
 	int clipIndex;
 } Video;
 
-AVStream* getVideoStream(Video* video);
-
-AVStream* getAudioStream(Video* video);
+AVStream* getStream(AVFormatContext* formatContext, int streamIndex);
 
 void initVideo(Video* video, char* filename);
 

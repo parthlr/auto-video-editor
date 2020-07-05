@@ -3,7 +3,7 @@ INCLUDE_DIR := include
 BIN_DIR := bin
 EXAMPLES_DIR := examples
 
-FFMPEG_LIBS := libavformat \ libswscale
+FFMPEG_LIBS := libavformat \ libswscale \ libswresample \ libavutil \ libavcodec
 CPPFLAGS := -I$(INCLUDE_DIR)
 CFLAGS := $(shell pkg-config --cflags $(FFMPEG_LIBS))
 LDLIBS := $(shell pkg-config --libs $(FFMPEG_LIBS))
