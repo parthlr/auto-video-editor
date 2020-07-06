@@ -65,6 +65,8 @@ int decodeAudio(Video* video, AVPacket* packet);
 
 int encodeAudio(Video* video, AVFrame* frame);
 
+AVFrame* convertAudio(Video* video, AVFrame* inputFrame);
+
 int copyVideoFrames(Video* video);
 
 int transcodeVideo(Video* video);

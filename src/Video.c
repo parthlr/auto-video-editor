@@ -237,7 +237,7 @@ int copyVideoFrames(Video* video) {
 			packet->stream_index = video->audioStream;
 		}
 		video->inputStream = getStream(video->inputContext, packet->stream_index);
-		sequence->outputStream = getStream(sequence->outputContext, packet->stream_index);
+		video->outputStream = getStream(video->outputContext, packet->stream_index);
 		packet->pts = av_rescale_q_rnd(packet->pts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 		packet->dts = av_rescale_q_rnd(packet->dts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 		packet->duration = av_rescale_q(packet->duration, video->inputStream->time_base, video->outputStream->time_base);
@@ -334,7 +334,7 @@ int encodeVideo(Video* video, AVFrame* frame) {
 		}
 		packet->stream_index = video->videoStream;
 		video->inputStream = getStream(video->inputContext, packet->stream_index);
-		sequence->outputStream = getStream(sequence->outputContext, packet->stream_index);
+		video->outputStream = getStream(video->outputContext, packet->stream_index);
 		packet->pts = av_rescale_q_rnd(packet->pts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 		packet->dts = av_rescale_q_rnd(packet->dts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 		packet->duration = av_rescale_q(packet->duration, video->inputStream->time_base, video->outputStream->time_base);
@@ -368,22 +368,21 @@ int decodeAudio(Video* video, AVPacket* packet) {
 		}
 		if (response >= 0) {
 			// Do stuff and encode
-			AVFrame* resampledFrame = av_frame_alloc();
-			if (!resampledFrame) {
-				printf("[ERROR] Failed to allocate memory for resampled frame\n");
-				return -1;
-			}
-			av_frame_copy_props(resampledFrame, frame);
-			resampledFrame->channel_layout = av_get_default_channel_layout(video->audioCodecContext_O->channels);
-			resampledFrame->sample_rate = video->audioCodecContext_O->sample_rate;
-			resampledFrame->format = AV_SAMPLE_FMT_S16;
-			if (swr_convert_frame(video->swrContext, resampledFrame, frame) < 0) {
-				printf("[ERROR] Failed to resample audio frame\n");
-				return -1;
-			}
-			if (encodeAudio(video, resampledFrame) < 0) {
-				printf("[ERROR] Failed to encode new audio\n");
-				return -1;
+			if (video->audioCodecContext_I->codec_id != video->audioCodecContext_O->codec_id) {
+				AVFrame* resampledFrame = convertAudio(video, frame);
+				if (!resampledFrame) {
+					printf("[ERROR] Failed to convert audio frame\n");
+					return -1;
+				}
+				if (encodeAudio(video, resampledFrame) < 0) {
+					printf("[ERROR] Failed to encode new audio\n");
+					return -1;
+				}
+			} else {
+				if (encodeAudio(video, frame) < 0) {
+					printf("[ERROR] Failed to encode new audio\n");
+					return -1;
+				}
 			}
 		}
 		av_frame_unref(frame);
@@ -412,7 +411,7 @@ int encodeAudio(Video* video, AVFrame* frame) {
 		}
 		packet->stream_index = video->audioStream;
 		video->inputStream = getStream(video->inputContext, packet->stream_index);
-		sequence->outputStream = getStream(sequence->outputContext, packet->stream_index);
+		video->outputStream = getStream(video->outputContext, packet->stream_index);
 		packet->pts = av_rescale_q_rnd(packet->pts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 		packet->dts = av_rescale_q_rnd(packet->dts, video->inputStream->time_base, video->outputStream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 		packet->duration = av_rescale_q(packet->duration, video->inputStream->time_base, video->outputStream->time_base);
@@ -427,6 +426,23 @@ int encodeAudio(Video* video, AVFrame* frame) {
 	av_packet_unref(packet);
 	av_packet_free(&packet);
 	return 0;
+}
+
+AVFrame* convertAudio(Video* video, AVFrame* inputFrame) {
+	AVFrame* resampledFrame = av_frame_alloc();
+	if (!resampledFrame) {
+		printf("[ERROR] Failed to allocate memory for resampled frame\n");
+		return NULL;
+	}
+	av_frame_copy_props(resampledFrame, inputFrame);
+	resampledFrame->channel_layout = av_get_default_channel_layout(video->audioCodecContext_O->channels);
+	resampledFrame->sample_rate = video->audioCodecContext_O->sample_rate;
+	resampledFrame->format = video->audioCodecContext_O->sample_fmt;
+	if (swr_convert_frame(video->swrContext, resampledFrame, inputFrame) < 0) {
+		printf("[ERROR] Failed to resample audio frame\n");
+		return NULL;
+	}
+	return resampledFrame;
 }
 
 int findPacket(AVFormatContext* inputContext, int frameIndex, int stream) {

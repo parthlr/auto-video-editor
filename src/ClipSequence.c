@@ -241,22 +241,21 @@ int decodeAudioSequence(ClipSequence* sequence, Video* video, AVPacket* packet, 
 			if (copy) {
 				sequence->a_currentdts = packet->dts - sequence->a_firstdts;
 
-				AVFrame* resampledFrame = av_frame_alloc();
-				if (!resampledFrame) {
-					printf("[ERROR] Failed to allocate memory for resampled frame\n");
-					return -1;
-				}
-				av_frame_copy_props(resampledFrame, frame);
-				resampledFrame->channel_layout = av_get_default_channel_layout(video->audioCodecContext_O->channels);
-				resampledFrame->sample_rate = video->audioCodecContext_O->sample_rate;
-				resampledFrame->format = AV_SAMPLE_FMT_S16;
-				if (swr_convert_frame(video->swrContext, resampledFrame, frame) < 0) {
-					printf("[ERROR] Failed to resample audio frame\n");
-					return -1;
-				}
-				if (encodeAudioSequence(sequence, video, resampledFrame) < 0) {
-					printf("[ERROR] Failed to encode new audio\n");
-					return -1;
+				if (video->audioCodecContext_I->codec_id != video->audioCodecContext_O->codec_id) {
+					AVFrame* resampledFrame = convertAudio(video, frame);
+					if (!resampledFrame) {
+						printf("[ERROR] Failed to convert audio frame\n");
+						return -1;
+					}
+					if (encodeAudioSequence(sequence, video, resampledFrame) < 0) {
+						printf("[ERROR] Failed to encode new audio\n");
+						return -1;
+					}
+				} else {
+					if (encodeAudioSequence(sequence, video, frame) < 0) {
+						printf("[ERROR] Failed to encode new audio\n");
+						return -1;
+					}
 				}
 			} else {
 				bool interesting = isFrameInteresting(video, frame, video->audioStream, 1.0);
@@ -371,6 +370,49 @@ int cutVideo(ClipSequence* sequence, Video* video, int startFrame, int endFrame)
 		}
 		if (av_interleaved_write_frame(sequence->outputContext, packet) < 0) {
 			printf("[ERROR] Failed to write video packet\n");
+		}
+		av_packet_unref(packet);
+	}
+	// Gives an error while encoding but it's the only solution that works
+	sequence->v_lastdts += sequence->v_currentdts;
+	sequence->a_lastdts += sequence->a_currentdts + VIDEO_DEFAULT_SAMPLE_COUNT;
+	return 0;
+}
+
+int cutVideoTranscode(ClipSequence* sequence, Video* video, int startFrame, int endFrame) {
+	printf("[WRITE] Cutting video from frame %i to %i\n", startFrame, endFrame);
+	if (findPacket(video->inputContext, startFrame, 0) < 0) {
+		printf("[ERROR] Failed to find packet\n");
+	}
+	AVPacket* packet = av_packet_alloc();
+	if (!packet) {
+		printf("[ERROR] Could not allocate packet for cutting video\n");
+		return -1;
+	}
+	int currentFrame = startFrame;
+	bool v_firstframe = true;
+	bool a_firstframe = true;
+	while (av_read_frame(video->inputContext, packet) >= 0 && currentFrame <= endFrame) {
+		if (packet->stream_index == video->videoStream) {
+			// Only count video frames since seeking is based on 60 fps video frames
+			currentFrame++;
+			if (v_firstframe) {
+				v_firstframe = false;
+				sequence->v_firstdts = packet->dts;
+			}
+			if (decodeVideoSequence(sequence, video, packet, -1, true) < 0) {
+				printf("[ERROR] Failed to decode and encode video\n");
+				return -1;
+			}
+		} else if (packet->stream_index == video->audioStream) {
+			if (a_firstframe) {
+				a_firstframe = false;
+				sequence->a_firstdts = packet->dts;
+			}
+			if (decodeAudioSequence(sequence, video, packet, -1, true) < 0) {
+				printf("[ERROR] Failed to decode and encode audio\n");
+				return -1;
+			}
 		}
 		av_packet_unref(packet);
 	}

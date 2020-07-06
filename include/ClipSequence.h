@@ -39,4 +39,6 @@ int analyzeVideo(ClipSequence* sequence, Video* video);
 
 int cutVideo(ClipSequence* sequence, Video* video, int startFrame, int endFrame);
 
+int cutVideoTranscode(ClipSequence* sequence, Video* video, int startFrame, int endFrame);
+
 void freeSequence(ClipSequence* sequence);
